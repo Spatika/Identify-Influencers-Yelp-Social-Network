@@ -4,6 +4,8 @@
 
 # Data files
 *.csv
+*.json
+*.crc
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
