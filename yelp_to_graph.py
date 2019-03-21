@@ -1,8 +1,7 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.types import *
-from pyspark.sql.functions import array_contains
+from pyspark.sql.functions import explode, split
 
-import pandas as pd
+
 # The entry point to programming Spark with the Dataset and DataFrame API.
 
 spark = SparkSession.builder\
@@ -16,12 +15,6 @@ spark.conf.set("spark.sql.shuffle.partitions", 6)
 spark.conf.set("spark.executor.memory", "7g")
 spark.conf.set("spark.driver.memory", "7g")
 
-#business = spark.read.csv('yelp_academic_dataset/yelp_business.csv', header=True)
-# df = pd.read_csv('yelp_academic_dataset/yelp_business.csv')
-#
-# df = df[['business_id', 'name', 'city']].astype(str)
-#
-# business = spark.createDataFrame(df[['business_id', 'name', 'city']])
 
 business = spark.read.json("yelp_dataset/business.json")
 
@@ -32,20 +25,12 @@ business = business.withColumnRenamed("review_count", "review_num").withColumnRe
 
 toronto_business = business.select("business_id", "city", "review_num", "business_avg_rating", "name").filter(business.city == "Toronto")
 
-# df = pd.read_csv('yelp_academic_dataset/yelp_user.csv')
-# df = df[['user_id', 'friends']].astype(str)
 users = spark.read.json("yelp_dataset/user.json")
 users.printSchema()
 
-cols = list(set(users.columns) - {'name', 'useful', 'funny', 'cool', 'compliment_writer', 'compliment_more',
-                                  'compliment_profile', 'compliment_list',
-                                  'compliment_hot', 'compliment_funny', 'compliment_cool', 'compliment_note'})
-
 users_lite = users.select('user_id', 'yelping_since', 'elite', 'friends', 'review_count').filter(users.friends != "None")
 users_lite.printSchema()
-#
-# df = pd.read_csv('yelp_academic_dataset/yelp_review.csv')
-# df = df[['review_id', "user_id", 'business_id', 'stars', 'date', 'useful', 'funny', 'cool']].astype(str)
+
 
 reviews = spark.read.json("yelp_dataset/review.json")
 reviews_lite = reviews.select("user_id", "business_id", "review_id", "stars", "date")
@@ -53,50 +38,44 @@ reviews_lite = reviews.select("user_id", "business_id", "review_id", "stars", "d
 
 toronto_business_reviewers = toronto_business.join(reviews_lite, "business_id")
 toronto_business_reviewers.printSchema()
-#toronto_business_reviewers.write.csv("output", mode='overwrite', header=True)
 
 toronto_users = toronto_business_reviewers.join(users_lite, "user_id")
-toronto_users.write.csv("output", mode='overwrite', header=True)
+toronto_users.write.csv("output1", mode='overwrite', header=True)
 
-#filtered_users = toronto_users.select()
+
+# exploded friends list - separated by comma + one  or more spaces
+exploded = toronto_users.select("user_id", explode(split(toronto_users.friends, "(,\s*)")))
+exploded.printSchema()
+exploded.write.csv("output2", mode='overwrite', header=True)
 
 # list of unique user_ids in Toronto
-vertices = spark.createDataFrame([
-    ("a", "Alice", 34),
-    ("b", "Bob", 36),
-    ("c", "Charlie", 30),
-    ("d", "David", 29),
-    ("e", "Esther", 32),
-    ("f", "Fanny", 36),
-    ("g", "Gabby", 60)], ["id", "name", "age"])
+vertices = toronto_users.selectExpr('user_id as id').distinct()
+vertices.printSchema()
+
+#filtered
+unique_list = [item.user_id for item in toronto_users.select('user_id').distinct().collect()]
+toronto_friends = exploded[exploded.col.isin(unique_list)]
 
 # Create an Edge DataFrame with "src" and "dst" columns
 
-# list of unique pairs in Toronto
-edges = spark.createDataFrame([
-    ("a", "b", "friend"),
-    ("b", "c", "follow"),
-    ("c", "b", "follow"),
-], ["src", "dst", "relationship"])
+edges = toronto_friends.selectExpr("user_id as src", "col as dst")
+yelpGraph = GraphFrame(vertices, edges)
 
-
-g = GraphFrame(vertices, edges)
-
-#### PART 1 & 2 - NO EDGE WEIGHTS
+#### PART 1 & 2 - NO EDGE WEIGHTS, BIDIRECTIONAL (undirected)
 
 
 #### PART 1 #####
 # Query: Get in-degree of each vertex - neighborhood profiling
-g.inDegrees.show()
+neighborhoodProfile = yelpGraph.inDegrees.sort("inDegree", ascending=False)
+neighborhoodProfile.write.csv("profile", mode='overwrite', header=True)
+
 ################
 
-# Query: Count the number of "follow" connections in the graph.
-g.edges.filter("relationship = 'follow'").count()
-
 #### PART 2 #####
-# Run PageRank algorithm, and show results.
-results = g.pageRank(resetProbability=0.01, maxIter=20)
-results.vertices.select("id", "pagerank").show()
+
+# Run PageRank algorithm, and show results
+# results = yelpGraph.pageRank(resetProbability=0.01, maxIter=10)
+# results.vertices.select("id", "pagerank").show(10)
 ################
 
 
