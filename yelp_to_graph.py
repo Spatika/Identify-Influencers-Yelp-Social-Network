@@ -75,7 +75,8 @@ neighborhoodProfile.write.csv("profile", mode='overwrite', header=True)
 
 # Run PageRank algorithm, and show results
 results = yelpGraph.pageRank(resetProbability=0.01, maxIter=10)
-results.vertices.select("id", "pagerank").show(10)
+resultsSorted = results.vertices.select("id", "pagerank").sort("pagerank", ascending=False)
+resultsSorted.write.csv("pageRank", mode='overwrite', header=True)
 ################
 
 
