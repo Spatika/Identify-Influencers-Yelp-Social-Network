@@ -45,8 +45,8 @@ toronto_users.write.csv("output1", mode='overwrite', header=True)
 
 # exploded friends list - separated by comma + one  or more spaces
 exploded = toronto_users.select("user_id", explode(split(toronto_users.friends, "(,\s*)")))
-exploded.printSchema()
-exploded.write.csv("output2", mode='overwrite', header=True)
+noDups = exploded.dropDuplicates()
+noDups.write.csv("output2", mode='overwrite', header=True)
 
 # list of unique user_ids in Toronto
 vertices = toronto_users.selectExpr('user_id as id').distinct()
@@ -54,7 +54,7 @@ vertices.printSchema()
 
 #filtered
 unique_list = [item.user_id for item in toronto_users.select('user_id').distinct().collect()]
-toronto_friends = exploded[exploded.col.isin(unique_list)]
+toronto_friends = noDups[noDups.col.isin(unique_list)]
 
 # Create an Edge DataFrame with "src" and "dst" columns
 
@@ -74,8 +74,8 @@ neighborhoodProfile.write.csv("profile", mode='overwrite', header=True)
 #### PART 2 #####
 
 # Run PageRank algorithm, and show results
-# results = yelpGraph.pageRank(resetProbability=0.01, maxIter=10)
-# results.vertices.select("id", "pagerank").show(10)
+results = yelpGraph.pageRank(resetProbability=0.01, maxIter=10)
+results.vertices.select("id", "pagerank").show(10)
 ################
 
 
