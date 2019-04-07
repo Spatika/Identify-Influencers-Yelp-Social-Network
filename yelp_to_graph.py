@@ -1,6 +1,6 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import explode, split
-from pyspark.sql.functions import mean as _mean, col, length, size
+from pyspark.sql.functions import mean as _mean, col, size
 
 
 # The entry point to programming Spark with the Dataset and DataFrame API.
@@ -12,7 +12,7 @@ spark = SparkSession.builder\
 from graphframes import *
 
 # set new runtime options
-spark.conf.set("spark.sql.shuffle.partitions", 20)
+spark.conf.set("spark.sql.shuffle.partitions", 200)
 spark.conf.set("spark.executor.memory", "8g")
 spark.conf.set("spark.driver.memory", "8g")
 spark.conf.set("maximizeResourceAllocation", "true")
@@ -52,26 +52,32 @@ toronto_business_reviewers = toronto_business.join(reviews_lite, "business_id")
 toronto_business_reviewers.printSchema()
 
 toronto_users = toronto_business_reviewers.join(users_lite, "user_id")
-toronto_users.printSchema()
 
-# keep users only with # of friends > 500
+#toronto_users.printSchema()
+
+# keep users only with # of friends > 100
 toronto_users_friend_list = toronto_users.withColumn('friends_list', split(toronto_users.friends, "(,\s*)"))
-toronto_users_min_friends = toronto_users_friend_list.filter(size(toronto_users_friend_list.friends_list) > 100)
+toronto_users_min_friends = toronto_users_friend_list.filter(size(toronto_users_friend_list.friends_list) > 300)
 
-#toronto_users_min_friends.select("user_id", "num_friends").sort("num_friends").write.csv("output", mode='overwrite', header=True)
+print("Toronto user-review-business schema: ")
+toronto_users_min_friends.printSchema()
 
 # exploded friends list - separated by comma + one  or more spaces
 exploded = toronto_users_min_friends.select("user_id", explode(split(toronto_users.friends, "(,\s*)")))
+
+# because you have multiple rows for the same user
 noDups = exploded.dropDuplicates()
 
 
 # list of unique user_ids in Toronto
 vertices = toronto_users_min_friends.selectExpr('user_id as id', 'elite').distinct()
+print("The total number of users now is:", vertices.count())
 vertices.printSchema()
 
 #filtered
 unique_list = [item.user_id for item in toronto_users_min_friends.select('user_id').distinct().collect()]
 toronto_friends = noDups[noDups.col.isin(unique_list)]
+
 
 # Create an Edge DataFrame with "src" and "dst" columns
 
@@ -103,11 +109,26 @@ neighborhoodprofile2.write.csv("profile2", mode='overwrite', header=True)
 
 #### PART 2 #####
 
-# Run PageRank algorithm, and show results
-results = yelpGraph.pageRank(resetProbability=0.01, maxIter=10)
+# Run PageRank algorithm, and write results to CSV
+results = yelpGraph.pageRank(resetProbability=0.01, maxIter=20)
 resultsSorted = results.vertices.select("id", "pagerank", "elite").sort("pagerank", ascending=False)
 resultsSorted.write.csv("pageRank", mode='overwrite', header=True)
+
 ################
 
+#### PART 3 - GET EDGE WEIGHTS #####
+
+# Count the number of reviews written by x's friends after x has written a review for the same restaurant
+edges.registerTempTable("edgesDB")
+toronto_users_min_friends.registerTempTable("usersTorontoDB")
+
+temp_table = spark.sql("Select S2.business_id, S2.date, S2.user_id from edgesDB as S1, usersTorontoDB as S2 where S1.src = S2.user_id")
+temp_table.show(3)
+temp_table.registerTempTable("CorrelatedTableDB")
+
+
+query = "Select E.src,E.dst,count(*) from edgesDB as E, CorrelatedTableDB as C, usersTorontoDB as U where E.src = C.user_id and C.business_id = U.business_id and U.user_id = E.dst and CAST(C.date as date) < CAST(U.date as date) group by E.src,E.dst"
+reviews_after_x = spark.sql(query)
+reviews_after_x.show(5)
 
 #https://stackoverflow.com/questions/35570603/dealing-with-commas-within-a-field-in-a-csv-file-using-pyspark
