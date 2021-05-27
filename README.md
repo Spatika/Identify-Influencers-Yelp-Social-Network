@@ -1,1 +1,5 @@
-# CS5344_Yelp_Influencers
+# Identify Influencers in the Yelp Social Network
+
+- PySpark on HDFS
+- PageRank
+
