@@ -11,6 +11,7 @@
 - Merge between Yelp User Attributes, Reviews + Business dataset - to get Toronto users, reviews & businesses
 - Segmented to just one city - Toronto for a dense graph, and it makes sense to study their interactions/influence effects
 - Filtered to get positive (>3 star) reviews, since we are interested in positive influence in this case
+- Removed users who have written less than the average # of reviews
 - Graph 1: One more filter to retain only users who have more than 500 friends
 - Graph 2: All users, those who have more or less than 500 friends
 
