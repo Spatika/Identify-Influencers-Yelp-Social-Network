@@ -27,3 +27,4 @@
 - **Metric:** 
   -  Out of the top 100 influencers identified by our algorithm, how many of those has Yelp already tagged as ‘Elite’ status? 
   -  Alternatively, does our algorithm identify potentially influential users who have **not** been identified as Elite, that businesses on Yelp could target?
+  -  Weighted PageRank successfully identified 3 and 5 "new Elite" users in Graphs 1 and 2 respectively
